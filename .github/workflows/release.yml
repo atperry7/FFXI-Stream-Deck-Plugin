@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          path: com.atperry7.ffxi-windower.sdPlugin
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -28,32 +30,19 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Prepare plugin directory
-        run: |
-          # Create the plugin directory structure expected by streamdeck
-          mkdir -p build
-
-          # Copy plugin files to the build directory with .sdPlugin suffix, excluding node_modules
-          robocopy . "build/com.atperry7.ffxi-windower.sdPlugin" /E /XD node_modules .git .github logs /XF "*.md"
-          # robocopy returns non-zero for success, so we ignore the exit code
-          if ($LASTEXITCODE -le 7) { $LASTEXITCODE = 0 }
-        shell: pwsh
+        working-directory: com.atperry7.ffxi-windower.sdPlugin
 
       - name: Validate plugin
-        run: streamdeck validate build/com.atperry7.ffxi-windower.sdPlugin
+        run: streamdeck validate com.atperry7.ffxi-windower.sdPlugin
 
       - name: Build plugin package
-        run: |
-          cd build
-          streamdeck pack com.atperry7.ffxi-windower.sdPlugin
-        shell: pwsh
+        run: streamdeck pack com.atperry7.ffxi-windower.sdPlugin
 
       - name: Find built package
         id: find-package
         run: |
-          $package = Get-ChildItem -Path "build" -Filter "*.streamDeckPlugin" | Select-Object -First 1
-          echo "PACKAGE_PATH=build/$($package.Name)" >> $env:GITHUB_OUTPUT
+          $package = Get-ChildItem -Path "." -Filter "*.streamDeckPlugin" | Select-Object -First 1
+          echo "PACKAGE_PATH=$($package.Name)" >> $env:GITHUB_OUTPUT
           echo "PACKAGE_NAME=$($package.Name)" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
