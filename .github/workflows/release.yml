@@ -30,7 +30,7 @@ jobs:
         run: npm ci
 
       - name: Validate plugin
-        run: streamdeck validate com.atperry7.ffxi-windower.sdPlugin
+        run: streamdeck validate .
         continue-on-error: true
 
       - name: Build plugin package
