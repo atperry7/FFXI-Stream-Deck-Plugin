@@ -32,6 +32,23 @@ jobs:
         run: npm ci
         working-directory: com.atperry7.ffxi-windower.sdPlugin
 
+      - name: Convert SVG icons to PNG
+        run: |
+          cd com.atperry7.ffxi-windower.sdPlugin/imgs
+          magick plugin.svg -resize 256x256 plugin.png
+          magick plugin.svg -resize 512x512 plugin@2x.png
+          magick action.svg -resize 72x72 action.png
+          magick action.svg -resize 144x144 action@2x.png
+          magick action-off.svg -resize 72x72 action-off.png
+          magick action-off.svg -resize 144x144 action-off@2x.png
+          magick action-on.svg -resize 72x72 action-on.png
+          magick action-on.svg -resize 144x144 action-on@2x.png
+          magick action-sequence.svg -resize 72x72 action-sequence.png
+          magick action-sequence.svg -resize 144x144 action-sequence@2x.png
+          magick action-cycle.svg -resize 72x72 action-cycle.png
+          magick action-cycle.svg -resize 144x144 action-cycle@2x.png
+        shell: pwsh
+
       - name: Validate plugin
         run: streamdeck validate com.atperry7.ffxi-windower.sdPlugin
 
