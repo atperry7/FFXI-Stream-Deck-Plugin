@@ -34,13 +34,10 @@ jobs:
           # Create the plugin directory structure expected by streamdeck
           mkdir -p build
 
-          # Copy plugin files to the build directory with .sdPlugin suffix
-          Copy-Item -Path "." -Destination "build/com.atperry7.ffxi-windower.sdPlugin" -Recurse -Force
-
-          # Remove git and github files from the copy
-          Remove-Item -Path "build/com.atperry7.ffxi-windower.sdPlugin/.git" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "build/com.atperry7.ffxi-windower.sdPlugin/.github" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "build/com.atperry7.ffxi-windower.sdPlugin/logs" -Recurse -Force -ErrorAction SilentlyContinue
+          # Copy plugin files to the build directory with .sdPlugin suffix, excluding node_modules
+          robocopy . "build/com.atperry7.ffxi-windower.sdPlugin" /E /XD node_modules .git .github logs /XF "*.md"
+          # robocopy returns non-zero for success, so we ignore the exit code
+          if ($LASTEXITCODE -le 7) { $LASTEXITCODE = 0 }
         shell: pwsh
 
       - name: Validate plugin
