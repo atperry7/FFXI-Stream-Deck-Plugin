@@ -1,0 +1,89 @@
+{
+    "Name": "FFXI Windower",
+    "Version": "1.0.0",
+    "SDKVersion": 2,
+    "Author": "atperry7",
+    "Description": "Send commands to FFXI Windower",
+    "Category": "FFXI",
+    "CategoryIcon": "imgs/plugin",
+    "Icon": "imgs/plugin",
+    "CodePath": "bin/plugin.js",
+    "Nodejs": {
+        "Version": "20",
+        "Debug": "enabled"
+    },
+    "Software": {
+        "MinimumVersion": "6.0"
+    },
+    "OS": [
+        {
+            "Platform": "windows",
+            "MinimumVersion": "10"
+        }
+    ],
+    "Actions": [
+        {
+            "Name": "Execute Command",
+            "UUID": "com.atperry7.ffxi-windower.execute",
+            "Icon": "imgs/action",
+            "Tooltip": "Send a command to Windower",
+            "PropertyInspectorPath": "ui/ExecuteCommand.html",
+            "Controllers": ["Keypad"],
+            "States": [
+                {
+                    "Image": "imgs/action",
+                    "TitleAlignment": "middle"
+                }
+            ]
+        },
+        {
+            "Name": "Toggle Command",
+            "UUID": "com.atperry7.ffxi-windower.toggle",
+            "Icon": "imgs/action",
+            "Tooltip": "Toggle between two commands",
+            "PropertyInspectorPath": "ui/ToggleCommand.html",
+            "Controllers": ["Keypad"],
+            "DisableAutomaticStates": true,
+            "States": [
+                {
+                    "Image": "imgs/action-off",
+                    "Title": "OFF",
+                    "TitleAlignment": "bottom"
+                },
+                {
+                    "Image": "imgs/action-on",
+                    "Title": "ON",
+                    "TitleAlignment": "bottom"
+                }
+            ]
+        },
+        {
+            "Name": "Sequence Command",
+            "UUID": "com.atperry7.ffxi-windower.sequence",
+            "Icon": "imgs/action-sequence",
+            "Tooltip": "Execute multiple commands in sequence with delays",
+            "PropertyInspectorPath": "ui/SequenceCommand.html",
+            "Controllers": ["Keypad"],
+            "States": [
+                {
+                    "Image": "imgs/action-sequence",
+                    "TitleAlignment": "middle"
+                }
+            ]
+        },
+        {
+            "Name": "Cycle Command",
+            "UUID": "com.atperry7.ffxi-windower.cycle",
+            "Icon": "imgs/action-cycle",
+            "Tooltip": "Cycle through a list of commands",
+            "PropertyInspectorPath": "ui/CycleCommand.html",
+            "Controllers": ["Keypad"],
+            "States": [
+                {
+                    "Image": "imgs/action-cycle",
+                    "TitleAlignment": "middle"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <rect width="40" height="40" fill="#1a1a2e"/>
+  <!-- Circular arrows indicating cycle -->
+  <path d="M20 8 A12 12 0 1 1 8 20" fill="none" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <path d="M20 8 L16 12 L16 4 Z" fill="#e94560"/>
+  <path d="M20 32 A12 12 0 0 1 8 20" fill="none" stroke="#e94560" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+</svg>

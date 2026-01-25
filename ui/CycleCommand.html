@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Cycle Command</title>
+    <link rel="stylesheet" href="https://sdpi-components.dev/releases/v3/sdpi-components.css">
+    <style>
+        body {
+            background-color: #2d2d2d;
+            color: #d8d8d8;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 12px;
+            margin: 0;
+            padding: 8px;
+        }
+        .section {
+            margin-bottom: 16px;
+        }
+        .section-label {
+            color: #9b9b9b;
+            font-size: 11px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+        .command-list {
+            margin-bottom: 8px;
+        }
+        .command-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        .command-row input {
+            background: #3b3b3b;
+            color: #d8d8d8;
+            border: 1px solid #4a4a4a;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .command-row input:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        .command-row input::placeholder {
+            color: #6b6b6b;
+        }
+        .command-row input.current {
+            border-color: #e94560;
+            background: #3f3545;
+        }
+        .label-input {
+            width: 70px;
+            flex: 0 0 70px;
+        }
+        .command-input {
+            flex: 1;
+        }
+        .remove-btn {
+            background: #c73e54;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .remove-btn:hover {
+            background: #e94560;
+        }
+        .add-btn {
+            background: #4a9d4a;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 14px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .add-btn:hover {
+            background: #5cb85c;
+        }
+        .reset-btn {
+            background: #5a7db5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 14px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .reset-btn:hover {
+            background: #6a8dc5;
+        }
+        .hint {
+            font-size: 10px;
+            color: #6b6b6b;
+            margin-top: 4px;
+        }
+        .header-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 6px;
+            font-size: 10px;
+            color: #9b9b9b;
+            padding-left: 2px;
+        }
+        .header-row .label-col {
+            width: 70px;
+            flex: 0 0 70px;
+        }
+        .header-row .command-col {
+            flex: 1;
+        }
+        .current-indicator {
+            font-size: 12px;
+            color: #e94560;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .form-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #e94560;
+        }
+        .checkbox-row label {
+            color: #d8d8d8;
+            font-size: 12px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="section">
+        <div class="section-label">Commands</div>
+        <div class="header-row">
+            <span class="label-col">Label</span>
+            <span class="command-col">Command</span>
+        </div>
+        <div id="command-list" class="command-list"></div>
+        <button type="button" class="add-btn" onclick="addCommand()">+ Add Command</button>
+        <div class="hint">Press cycles through commands in order (highlighted = next)</div>
+    </div>
+
+    <div class="section">
+        <div class="section-label">Position</div>
+        <div class="current-indicator" id="current-indicator">Next: 1</div>
+        <button type="button" class="reset-btn" onclick="resetToFirst()">Reset to First</button>
+    </div>
+
+    <div class="section">
+        <div class="section-label">Display</div>
+        <div class="checkbox-row">
+            <input type="checkbox" id="showLabel" checked>
+            <label for="showLabel">Show label on key</label>
+        </div>
+        <div class="hint">Display the next command's label on the Stream Deck key</div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let uuid = null;
+        let commands = [];
+        let currentIndex = 0;
+
+        // Connect to Stream Deck
+        function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+            uuid = inPropertyInspectorUUID;
+            const actionInfo = JSON.parse(inActionInfo);
+            const settings = actionInfo.payload.settings || {};
+
+            // Load existing settings
+            commands = Array.isArray(settings.commands) ? settings.commands.slice() : [];
+            currentIndex = parseInt(settings.currentIndex) || 0;
+            document.getElementById('showLabel').checked = settings.showLabel !== false;
+
+            if (commands.length === 0) {
+                commands.push({ label: '', command: '' });
+            }
+            renderCommands();
+            updateCurrentIndicator();
+
+            // Connect to Stream Deck
+            websocket = new WebSocket('ws://127.0.0.1:' + inPort);
+
+            websocket.onopen = function() {
+                websocket.send(JSON.stringify({
+                    event: inRegisterEvent,
+                    uuid: inPropertyInspectorUUID
+                }));
+            };
+
+            websocket.onmessage = function(evt) {
+                const data = JSON.parse(evt.data);
+                if (data.event === 'didReceiveSettings') {
+                    const newSettings = data.payload.settings || {};
+                    commands = Array.isArray(newSettings.commands) ? newSettings.commands.slice() : [];
+                    currentIndex = parseInt(newSettings.currentIndex) || 0;
+                    document.getElementById('showLabel').checked = newSettings.showLabel !== false;
+                    if (commands.length === 0) {
+                        commands.push({ label: '', command: '' });
+                    }
+                    renderCommands();
+                    updateCurrentIndicator();
+                }
+            };
+
+            // Add change listener for showLabel
+            document.getElementById('showLabel').addEventListener('change', saveSettings);
+        }
+
+        function renderCommands() {
+            const container = document.getElementById('command-list');
+            container.innerHTML = '';
+
+            const safeIndex = commands.length > 0 ? (currentIndex % commands.length) : 0;
+
+            commands.forEach((cmd, index) => {
+                const row = document.createElement('div');
+                row.className = 'command-row';
+                const isCurrent = index === safeIndex;
+
+                const labelInput = document.createElement('input');
+                labelInput.type = 'text';
+                labelInput.className = 'label-input' + (isCurrent ? ' current' : '');
+                labelInput.placeholder = 'Label';
+                labelInput.value = cmd.label || '';
+                labelInput.dataset.index = index;
+                labelInput.dataset.field = 'label';
+                labelInput.addEventListener('input', handleInputChange);
+
+                const commandInput = document.createElement('input');
+                commandInput.type = 'text';
+                commandInput.className = 'command-input' + (isCurrent ? ' current' : '');
+                commandInput.placeholder = 'gs c cycle MeleeMode';
+                commandInput.value = cmd.command || '';
+                commandInput.dataset.index = index;
+                commandInput.dataset.field = 'command';
+                commandInput.addEventListener('input', handleInputChange);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'remove-btn';
+                removeBtn.textContent = 'x';
+                removeBtn.addEventListener('click', () => removeCommand(index));
+
+                row.appendChild(labelInput);
+                row.appendChild(commandInput);
+                row.appendChild(removeBtn);
+                container.appendChild(row);
+            });
+        }
+
+        function handleInputChange(e) {
+            const index = parseInt(e.target.dataset.index);
+            const field = e.target.dataset.field;
+            commands[index][field] = e.target.value;
+            updateCurrentIndicator();
+            saveSettings();
+        }
+
+        function updateCurrentIndicator() {
+            const indicator = document.getElementById('current-indicator');
+            const validCommands = commands.filter(c => c.command);
+            const total = validCommands.length || commands.length || 1;
+            const safeIndex = commands.length > 0 ? (currentIndex % commands.length) : 0;
+            const label = commands[safeIndex]?.label || '';
+            indicator.textContent = 'Next: ' + (safeIndex + 1) + '/' + commands.length + (label ? ' (' + label + ')' : '');
+        }
+
+        function addCommand() {
+            commands.push({ label: '', command: '' });
+            renderCommands();
+            updateCurrentIndicator();
+            saveSettings();
+        }
+
+        function removeCommand(index) {
+            commands.splice(index, 1);
+            if (commands.length === 0) {
+                commands.push({ label: '', command: '' });
+            }
+            if (currentIndex >= commands.length) {
+                currentIndex = 0;
+            }
+            renderCommands();
+            updateCurrentIndicator();
+            saveSettings();
+        }
+
+        function resetToFirst() {
+            currentIndex = 0;
+            renderCommands();
+            updateCurrentIndicator();
+            saveSettings();
+        }
+
+        function saveSettings() {
+            // Keep all commands with content
+            const commandsToSave = commands.map(c => ({
+                label: c.label || '',
+                command: c.command || ''
+            })).filter(c => c.command || c.label);
+
+            const newSettings = {
+                commands: commandsToSave,
+                currentIndex: currentIndex,
+                showLabel: document.getElementById('showLabel').checked
+            };
+
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    event: 'setSettings',
+                    context: uuid,
+                    payload: newSettings
+                }));
+            }
+        }
+    </script>
+</body>
+</html>

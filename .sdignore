@@ -1,0 +1,23 @@
+# Exclude from Stream Deck plugin package
+
+# Git files
+.git/
+.gitignore
+.github/
+
+# Logs directory
+logs/
+
+# Development files
+*.md
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Package files
+*.streamDeckPlugin
+.sdignore

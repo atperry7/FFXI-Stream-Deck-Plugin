@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Sequence Command</title>
+    <link rel="stylesheet" href="https://sdpi-components.dev/releases/v3/sdpi-components.css">
+    <style>
+        body {
+            background-color: #2d2d2d;
+            color: #d8d8d8;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 12px;
+            margin: 0;
+            padding: 8px;
+        }
+        .section {
+            margin-bottom: 16px;
+        }
+        .section-label {
+            color: #9b9b9b;
+            font-size: 11px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+        .command-list {
+            margin-bottom: 8px;
+        }
+        .command-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        .command-row input {
+            background: #3b3b3b;
+            color: #d8d8d8;
+            border: 1px solid #4a4a4a;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .command-row input:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        .command-row input::placeholder {
+            color: #6b6b6b;
+        }
+        .label-input {
+            width: 70px;
+            flex: 0 0 70px;
+        }
+        .command-input {
+            flex: 1;
+        }
+        .remove-btn {
+            background: #c73e54;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .remove-btn:hover {
+            background: #e94560;
+        }
+        .add-btn {
+            background: #4a9d4a;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 14px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .add-btn:hover {
+            background: #5cb85c;
+        }
+        .hint {
+            font-size: 10px;
+            color: #6b6b6b;
+            margin-top: 4px;
+        }
+        .header-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 6px;
+            font-size: 10px;
+            color: #9b9b9b;
+            padding-left: 2px;
+        }
+        .header-row .label-col {
+            width: 70px;
+            flex: 0 0 70px;
+        }
+        .header-row .command-col {
+            flex: 1;
+        }
+        .form-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .form-label {
+            width: 80px;
+            flex: 0 0 80px;
+            color: #9b9b9b;
+            font-size: 11px;
+        }
+        .form-input {
+            flex: 1;
+        }
+        .form-input input,
+        .form-input select {
+            width: 100%;
+            background: #3b3b3b;
+            color: #d8d8d8;
+            border: 1px solid #4a4a4a;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            box-sizing: border-box;
+        }
+        .form-input input:focus,
+        .form-input select:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+    </style>
+</head>
+<body>
+    <div class="section">
+        <div class="section-label">Commands</div>
+        <div class="header-row">
+            <span class="label-col">Label</span>
+            <span class="command-col">Command</span>
+        </div>
+        <div id="command-list" class="command-list"></div>
+        <button type="button" class="add-btn" onclick="addCommand()">+ Add Command</button>
+        <div class="hint">Commands execute in order from top to bottom</div>
+    </div>
+
+    <div class="section">
+        <div class="form-row">
+            <div class="form-label">Delay (ms)</div>
+            <div class="form-input">
+                <input type="number" id="delay" value="500" min="0" max="10000">
+            </div>
+        </div>
+        <div class="hint" style="margin-left: 80px;">Milliseconds between each command</div>
+    </div>
+
+    <div class="section">
+        <div class="form-row">
+            <div class="form-label">On Error</div>
+            <div class="form-input">
+                <select id="onError">
+                    <option value="stop">Stop sequence</option>
+                    <option value="continue">Continue to next</option>
+                </select>
+            </div>
+        </div>
+        <div class="hint" style="margin-left: 80px;">What to do if a command fails</div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let uuid = null;
+        let commands = [];
+
+        // Connect to Stream Deck
+        function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+            uuid = inPropertyInspectorUUID;
+            const actionInfo = JSON.parse(inActionInfo);
+            const settings = actionInfo.payload.settings || {};
+
+            // Load existing settings
+            commands = Array.isArray(settings.commands) ? settings.commands.slice() : [];
+            document.getElementById('delay').value = settings.delay ?? 500;
+            document.getElementById('onError').value = settings.onError || 'stop';
+
+            if (commands.length === 0) {
+                commands.push({ label: '', command: '' });
+            }
+            renderCommands();
+
+            // Connect to Stream Deck
+            websocket = new WebSocket('ws://127.0.0.1:' + inPort);
+
+            websocket.onopen = function() {
+                websocket.send(JSON.stringify({
+                    event: inRegisterEvent,
+                    uuid: inPropertyInspectorUUID
+                }));
+            };
+
+            websocket.onmessage = function(evt) {
+                const data = JSON.parse(evt.data);
+                if (data.event === 'didReceiveSettings') {
+                    const newSettings = data.payload.settings || {};
+                    commands = Array.isArray(newSettings.commands) ? newSettings.commands.slice() : [];
+                    document.getElementById('delay').value = newSettings.delay ?? 500;
+                    document.getElementById('onError').value = newSettings.onError || 'stop';
+                    if (commands.length === 0) {
+                        commands.push({ label: '', command: '' });
+                    }
+                    renderCommands();
+                }
+            };
+
+            // Add change listeners for delay and onError
+            document.getElementById('delay').addEventListener('change', saveSettings);
+            document.getElementById('onError').addEventListener('change', saveSettings);
+        }
+
+        function renderCommands() {
+            const container = document.getElementById('command-list');
+            container.innerHTML = '';
+
+            commands.forEach((cmd, index) => {
+                const row = document.createElement('div');
+                row.className = 'command-row';
+
+                const labelInput = document.createElement('input');
+                labelInput.type = 'text';
+                labelInput.className = 'label-input';
+                labelInput.placeholder = 'Label';
+                labelInput.value = cmd.label || '';
+                labelInput.dataset.index = index;
+                labelInput.dataset.field = 'label';
+                labelInput.addEventListener('input', handleInputChange);
+
+                const commandInput = document.createElement('input');
+                commandInput.type = 'text';
+                commandInput.className = 'command-input';
+                commandInput.placeholder = 'input /ma "Cure" <me>';
+                commandInput.value = cmd.command || '';
+                commandInput.dataset.index = index;
+                commandInput.dataset.field = 'command';
+                commandInput.addEventListener('input', handleInputChange);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'remove-btn';
+                removeBtn.textContent = 'x';
+                removeBtn.addEventListener('click', () => removeCommand(index));
+
+                row.appendChild(labelInput);
+                row.appendChild(commandInput);
+                row.appendChild(removeBtn);
+                container.appendChild(row);
+            });
+        }
+
+        function handleInputChange(e) {
+            const index = parseInt(e.target.dataset.index);
+            const field = e.target.dataset.field;
+            commands[index][field] = e.target.value;
+            saveSettings();
+        }
+
+        function addCommand() {
+            commands.push({ label: '', command: '' });
+            renderCommands();
+            saveSettings();
+        }
+
+        function removeCommand(index) {
+            commands.splice(index, 1);
+            if (commands.length === 0) {
+                commands.push({ label: '', command: '' });
+            }
+            renderCommands();
+            saveSettings();
+        }
+
+        function saveSettings() {
+            // Keep all commands, even empty ones, for UI consistency
+            // Filter only when sending to preserve what user sees
+            const commandsToSave = commands.map(c => ({
+                label: c.label || '',
+                command: c.command || ''
+            })).filter(c => c.command || c.label);
+
+            const newSettings = {
+                commands: commandsToSave,
+                delay: parseInt(document.getElementById('delay').value) || 500,
+                onError: document.getElementById('onError').value || 'stop'
+            };
+
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    event: 'setSettings',
+                    context: uuid,
+                    payload: newSettings
+                }));
+            }
+        }
+    </script>
+</body>
+</html>

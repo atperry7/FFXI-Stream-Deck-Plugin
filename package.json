@@ -1,0 +1,9 @@
+{
+    "name": "ffxi-windower-streamdeck",
+    "version": "1.0.0",
+    "main": "bin/plugin.js",
+    "type": "module",
+    "dependencies": {
+        "@elgato/streamdeck": "^1.0.0"
+    }
+}

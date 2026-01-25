@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <rect width="40" height="40" fill="#1a1a2e"/>
+  <!-- Three stacked arrows indicating sequence -->
+  <path d="M10 12 L20 12 L20 9 L26 14 L20 19 L20 16 L10 16 Z" fill="#e94560"/>
+  <path d="M14 20 L24 20 L24 17 L30 22 L24 27 L24 24 L14 24 Z" fill="#e94560" opacity="0.7"/>
+  <path d="M10 28 L20 28 L20 25 L26 30 L20 35 L20 32 L10 32 Z" fill="#e94560" opacity="0.4"/>
+</svg>
