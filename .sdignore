@@ -1,8 +1,5 @@
 # Exclude from Stream Deck plugin package
 
-# Dependencies
-node_modules/
-
 # Git files
 .git/
 .gitignore
