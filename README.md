@@ -1,4 +1,4 @@
-# FFXI Windower Stream Deck Plugin
+# FFXI Stream Deck Plugin
 
 Control Final Fantasy XI through your Elgato Stream Deck. Send commands directly to Windower with the press of a button.
 
@@ -15,6 +15,7 @@ Control Final Fantasy XI through your Elgato Stream Deck. Send commands directly
 - Elgato Stream Deck software 6.0+
 - [Windower 4](https://www.windower.net/) for FFXI
 - **StreamDeckBridge addon** for Windower (required for communication)
+  - https://github.com/atperry7/StreamDeckBridge
 
 ### Installing the StreamDeckBridge Addon
 
