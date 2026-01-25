@@ -29,13 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate plugin
-        run: streamdeck validate .
-        continue-on-error: true
-
-      - name: Build plugin package
+      - name: Prepare plugin directory
         run: |
-          # Create the plugin directory structure expected by streamdeck pack
+          # Create the plugin directory structure expected by streamdeck
           mkdir -p build
 
           # Copy plugin files to the build directory with .sdPlugin suffix
@@ -45,8 +41,13 @@ jobs:
           Remove-Item -Path "build/com.atperry7.ffxi-windower.sdPlugin/.git" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "build/com.atperry7.ffxi-windower.sdPlugin/.github" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "build/com.atperry7.ffxi-windower.sdPlugin/logs" -Recurse -Force -ErrorAction SilentlyContinue
+        shell: pwsh
 
-          # Pack the plugin
+      - name: Validate plugin
+        run: streamdeck validate build/com.atperry7.ffxi-windower.sdPlugin
+
+      - name: Build plugin package
+        run: |
           cd build
           streamdeck pack com.atperry7.ffxi-windower.sdPlugin
         shell: pwsh

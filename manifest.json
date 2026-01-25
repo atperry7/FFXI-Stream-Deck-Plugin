@@ -4,7 +4,7 @@
     "SDKVersion": 2,
     "Author": "atperry7",
     "Description": "Send commands to FFXI Windower",
-    "Category": "FFXI",
+    "Category": "FFXI Windower",
     "CategoryIcon": "imgs/plugin",
     "Icon": "imgs/plugin",
     "CodePath": "bin/plugin.js",
@@ -13,7 +13,7 @@
         "Debug": "enabled"
     },
     "Software": {
-        "MinimumVersion": "6.0"
+        "MinimumVersion": "6.4"
     },
     "OS": [
         {
