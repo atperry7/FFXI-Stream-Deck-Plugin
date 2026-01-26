@@ -9,6 +9,10 @@ const runningSequences = new Set();
 // Track cycle positions per context (persisted in settings, but also cached here)
 const cyclePositions = new Map();
 
+// Long press to reset functionality
+const keyPressTimers = new Map();  // Track press start times by context
+const LONG_PRESS_THRESHOLD = 750;  // milliseconds
+
 /**
  * Sleep utility for delays between commands
  */
@@ -77,11 +81,39 @@ streamDeck.actions.registerAction({
 
 /**
  * Toggle Command action - toggles between two commands with visual state
+ * Long press (750ms+) resets to OFF state without sending command
  */
 streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.toggle",
 
     onKeyDown: async (event) => {
+        const context = event.action.id;
+        keyPressTimers.set(context, Date.now());
+        await event.action.setTitle("Hold...");
+    },
+
+    onKeyUp: async (event) => {
+        const context = event.action.id;
+        const startTime = keyPressTimers.get(context);
+        keyPressTimers.delete(context);
+
+        // Clear the "Hold..." title
+        await event.action.setTitle("");
+
+        const pressDuration = startTime ? Date.now() - startTime : 0;
+
+        // Long press: reset to OFF state
+        if (pressDuration >= LONG_PRESS_THRESHOLD) {
+            streamDeck.logger.info('Toggle reset to OFF state');
+            await event.action.setState(0);
+            await event.action.setTitle("RESET!");
+            setTimeout(() => {
+                event.action.setTitle("");
+            }, 500);
+            return;
+        }
+
+        // Short press: normal toggle behavior
         const { command_on, command_off } = event.payload.settings;
         const currentState = event.payload.state; // 0 = off, 1 = on
 
@@ -110,12 +142,46 @@ streamDeck.actions.registerAction({
 
 /**
  * Sequence Command action - executes multiple commands in sequence with delays
+ * Long press (750ms+) clears stuck sequence guard without sending commands
  */
 streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.sequence",
 
     onKeyDown: async (event) => {
         const context = event.action.id;
+
+        // Don't show "Hold..." if sequence is already running (would interfere with progress)
+        if (!runningSequences.has(context)) {
+            keyPressTimers.set(context, Date.now());
+            await event.action.setTitle("Hold...");
+        }
+    },
+
+    onKeyUp: async (event) => {
+        const context = event.action.id;
+        const startTime = keyPressTimers.get(context);
+        keyPressTimers.delete(context);
+
+        const pressDuration = startTime ? Date.now() - startTime : 0;
+
+        // Long press: clear from runningSequences (in case stuck)
+        if (pressDuration >= LONG_PRESS_THRESHOLD) {
+            const wasRunning = runningSequences.has(context);
+            runningSequences.delete(context);
+            streamDeck.logger.info(`Sequence reset${wasRunning ? ' (was stuck)' : ''}`);
+            await event.action.setTitle("RESET!");
+            setTimeout(() => {
+                event.action.setTitle("");
+            }, 500);
+            return;
+        }
+
+        // Clear "Hold..." if it was showing (sequence wasn't running)
+        if (startTime && !runningSequences.has(context)) {
+            await event.action.setTitle("");
+        }
+
+        // Short press: run sequence
         const settings = event.payload.settings;
         const commands = settings.commands || [];
         const delay = parseInt(settings.delay) || 500;
@@ -173,6 +239,7 @@ streamDeck.actions.registerAction({
 
 /**
  * Cycle Command action - cycles through a list of commands
+ * Long press (750ms+) resets to first position without sending command
  */
 streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.cycle",
@@ -217,13 +284,52 @@ streamDeck.actions.registerAction({
 
     onKeyDown: async (event) => {
         const context = event.action.id;
+        keyPressTimers.set(context, Date.now());
+        await event.action.setTitle("Hold...");
+    },
+
+    onKeyUp: async (event) => {
+        const context = event.action.id;
+        const startTime = keyPressTimers.get(context);
+        keyPressTimers.delete(context);
+
         const settings = event.payload.settings;
         const commands = settings.commands || [];
         const showLabel = settings.showLabel !== false;
 
+        const pressDuration = startTime ? Date.now() - startTime : 0;
+
+        // Long press: reset to first position (index 0)
+        if (pressDuration >= LONG_PRESS_THRESHOLD) {
+            streamDeck.logger.info('Cycle reset to position 0');
+
+            // Reset to index 0
+            cyclePositions.set(context, 0);
+
+            // Persist reset index to settings
+            await event.action.setSettings({
+                ...settings,
+                currentIndex: 0
+            });
+
+            // Show reset feedback, then show first label
+            await event.action.setTitle("RESET!");
+            setTimeout(async () => {
+                if (showLabel && commands.length > 0) {
+                    const label = commands[0]?.label || "1";
+                    await event.action.setTitle(label);
+                } else {
+                    await event.action.setTitle("");
+                }
+            }, 500);
+            return;
+        }
+
+        // Short press: normal cycle behavior
         if (commands.length === 0) {
             streamDeck.logger.warn('No commands configured for cycle');
             await event.action.showAlert();
+            await event.action.setTitle("");
             return;
         }
 
@@ -238,6 +344,13 @@ streamDeck.actions.registerAction({
         if (!cmd?.command) {
             streamDeck.logger.warn('Empty command in cycle');
             await event.action.showAlert();
+            if (showLabel && commands.length > 0) {
+                const safeIndex = currentIndex % commands.length;
+                const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
+                await event.action.setTitle(label);
+            } else {
+                await event.action.setTitle("");
+            }
             return;
         }
 
@@ -259,6 +372,8 @@ streamDeck.actions.registerAction({
             if (showLabel) {
                 const label = cmd.label || `${nextIndex + 1}`;
                 await event.action.setTitle(label);
+            } else {
+                await event.action.setTitle("");
             }
 
             // Brief visual feedback
@@ -270,6 +385,14 @@ streamDeck.actions.registerAction({
         } catch (err) {
             streamDeck.logger.error(`Cycle command failed: ${err.message}`);
             await event.action.showAlert();
+            // Restore the label on error
+            if (showLabel && commands.length > 0) {
+                const safeIndex = currentIndex % commands.length;
+                const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
+                await event.action.setTitle(label);
+            } else {
+                await event.action.setTitle("");
+            }
         }
     }
 });
