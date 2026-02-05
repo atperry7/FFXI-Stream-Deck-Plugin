@@ -24,12 +24,12 @@ streamDeck.logger.setLevel(LogLevel.DEBUG);
 
 /**
  * Determine the routing target from button settings.
- * Priority: character field > focus checkbox > @server
+ * Priority: character field > focus checkbox > @main
  */
 function getTarget(settings) {
     const character = (settings.character || '').trim();
     if (character) return character;
-    return settings.focus !== false ? '@focus' : '@server';
+    return settings.focus !== false ? '@focus' : '@main';
 }
 
 /**
