@@ -11,6 +11,7 @@ const cyclePositions = new Map();
 
 // Long press to reset functionality
 const keyPressTimers = new Map();  // Track press start times by context
+const holdFeedbackTimers = new Map();  // Track setTimeout IDs for hold feedback
 const LONG_PRESS_THRESHOLD = 750;  // milliseconds
 
 /**
@@ -109,12 +110,19 @@ streamDeck.actions.registerAction({
         const context = event.action.id;
         keyPressTimers.set(context, Date.now());
         await event.action.setTitle("Hold...");
+        holdFeedbackTimers.set(context, setTimeout(() => {
+            event.action.setTitle("RESET!");
+        }, LONG_PRESS_THRESHOLD));
     },
 
     onKeyUp: async (event) => {
         const context = event.action.id;
         const startTime = keyPressTimers.get(context);
         keyPressTimers.delete(context);
+
+        const feedbackTimer = holdFeedbackTimers.get(context);
+        if (feedbackTimer) clearTimeout(feedbackTimer);
+        holdFeedbackTimers.delete(context);
 
         // Clear the "Hold..." title
         await event.action.setTitle("");
@@ -174,6 +182,9 @@ streamDeck.actions.registerAction({
         if (!runningSequences.has(context)) {
             keyPressTimers.set(context, Date.now());
             await event.action.setTitle("Hold...");
+            holdFeedbackTimers.set(context, setTimeout(() => {
+                event.action.setTitle("RESET!");
+            }, LONG_PRESS_THRESHOLD));
         }
     },
 
@@ -181,6 +192,10 @@ streamDeck.actions.registerAction({
         const context = event.action.id;
         const startTime = keyPressTimers.get(context);
         keyPressTimers.delete(context);
+
+        const feedbackTimer = holdFeedbackTimers.get(context);
+        if (feedbackTimer) clearTimeout(feedbackTimer);
+        holdFeedbackTimers.delete(context);
 
         const pressDuration = startTime ? Date.now() - startTime : 0;
 
@@ -231,7 +246,8 @@ streamDeck.actions.registerAction({
                 await event.action.setTitle(titleText);
 
                 try {
-                    await sendToWindower(formatCommand(settings, cmd.command));
+                    const cmdSettings = cmd.character ? { ...settings, character: cmd.character } : settings;
+                    await sendToWindower(formatCommand(cmdSettings, cmd.command));
                     streamDeck.logger.info(`Sequence [${i + 1}/${commands.length}]: ${cmd.command}`);
                 } catch (err) {
                     streamDeck.logger.error(`Sequence command failed: ${err.message}`);
@@ -306,12 +322,19 @@ streamDeck.actions.registerAction({
         const context = event.action.id;
         keyPressTimers.set(context, Date.now());
         await event.action.setTitle("Hold...");
+        holdFeedbackTimers.set(context, setTimeout(() => {
+            event.action.setTitle("RESET!");
+        }, LONG_PRESS_THRESHOLD));
     },
 
     onKeyUp: async (event) => {
         const context = event.action.id;
         const startTime = keyPressTimers.get(context);
         keyPressTimers.delete(context);
+
+        const feedbackTimer = holdFeedbackTimers.get(context);
+        if (feedbackTimer) clearTimeout(feedbackTimer);
+        holdFeedbackTimers.delete(context);
 
         const settings = event.payload.settings;
         const commands = settings.commands || [];
