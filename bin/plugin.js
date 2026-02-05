@@ -435,9 +435,7 @@ streamDeck.actions.registerAction({
         let currentIndex = cyclePositions.get(context) ?? (parseInt(settings.currentIndex) || 0);
         currentIndex = currentIndex % commands.length; // Safety wrap
 
-        // Advance to next index FIRST (cycle, then execute)
-        const nextIndex = (currentIndex + 1) % commands.length;
-        const cmd = commands[nextIndex];
+        const cmd = commands[currentIndex];
 
         if (!cmd?.command) {
             streamDeck.logger.warn('Empty command in cycle');
@@ -446,12 +444,13 @@ streamDeck.actions.registerAction({
         }
 
         try {
-            // Execute the NEW state's command (per-command character overrides button-level target)
+            // Execute the current command (per-command character overrides button-level target)
             const cmdSettings = cmd.character ? { ...settings, character: cmd.character } : settings;
             await sendToWindower(formatCommand(cmdSettings, cmd.command));
-            streamDeck.logger.info(`Cycle to [${nextIndex + 1}/${commands.length}]: ${cmd.command}`);
+            streamDeck.logger.info(`Cycle [${currentIndex + 1}/${commands.length}]: ${cmd.command}`);
 
-            // Update cached position to new state
+            // Advance to next position after executing
+            const nextIndex = (currentIndex + 1) % commands.length;
             cyclePositions.set(context, nextIndex);
 
             // Persist the new index to settings
@@ -460,9 +459,10 @@ streamDeck.actions.registerAction({
                 currentIndex: nextIndex
             });
 
-            // Update display to show current state (what we just switched to)
+            // Update display to show next command
             if (showLabel) {
-                const label = cmd.label || `${nextIndex + 1}`;
+                const nextCmd = commands[nextIndex];
+                const label = nextCmd?.label || `${nextIndex + 1}`;
                 await event.action.setTitle(label);
             } else {
                 await event.action.setTitle("");
@@ -477,14 +477,6 @@ streamDeck.actions.registerAction({
         } catch (err) {
             streamDeck.logger.error(`Cycle command failed: ${err.message}`);
             await event.action.showAlert();
-            // Restore the label on error
-            if (showLabel && commands.length > 0) {
-                const safeIndex = currentIndex % commands.length;
-                const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
-                await event.action.setTitle(label);
-            } else {
-                await event.action.setTitle("");
-            }
         }
     }
 });
