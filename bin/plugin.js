@@ -200,16 +200,16 @@ streamDeck.actions.registerAction({
         const pressDuration = endHoldDetection(context);
         const currentState = event.payload.state; // 0 = off, 1 = on
 
-        // Restore original image if hold entered visual feedback phase
+        // Clear custom image override if hold entered visual feedback phase
+        // Using undefined lets the manifest's state-based icons take control again
         if (pressDuration > HOLD_DEAD_ZONE) {
-            await event.action.setImage(currentState === 0 ? 'imgs/action-off' : 'imgs/action-on');
+            await event.action.setImage(undefined);
         }
 
         // Long press: reset to OFF state
         if (pressDuration >= HOLD_THRESHOLD) {
             streamDeck.logger.info('Toggle reset to OFF state');
             await event.action.setState(0);
-            await event.action.showOk();
             return;
         }
 
@@ -271,7 +271,6 @@ streamDeck.actions.registerAction({
             streamDeck.logger.info(`Sequence reset${wasRunning ? ' (was stuck)' : ''}`);
             await event.action.setImage('imgs/action-sequence');
             await event.action.setTitle("");
-            await event.action.showOk();
             return;
         }
 
@@ -414,14 +413,13 @@ streamDeck.actions.registerAction({
                 currentIndex: 0
             });
 
-            // Restore first label, then show checkmark confirmation
+            // Restore first label
             if (showLabel && commands.length > 0) {
                 const label = commands[0]?.label || "1";
                 await event.action.setTitle(label);
             } else {
                 await event.action.setTitle("");
             }
-            await event.action.showOk();
             return;
         }
 
