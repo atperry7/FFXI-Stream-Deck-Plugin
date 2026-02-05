@@ -63,6 +63,7 @@ function startProgressAnimation(context, action) {
     const animStart = Date.now();
 
     const tick = async () => {
+        if (!holdAnimationTimers.has(context)) return; // cancelled
         const elapsed = Date.now() - animStart;
         const progress = Math.min(100, (elapsed / HOLD_ANIMATION_DURATION) * 100);
         const complete = progress >= 100;
@@ -445,8 +446,9 @@ streamDeck.actions.registerAction({
         }
 
         try {
-            // Execute the NEW state's command
-            await sendToWindower(formatCommand(settings, cmd.command));
+            // Execute the NEW state's command (per-command character overrides button-level target)
+            const cmdSettings = cmd.character ? { ...settings, character: cmd.character } : settings;
+            await sendToWindower(formatCommand(cmdSettings, cmd.command));
             streamDeck.logger.info(`Cycle to [${nextIndex + 1}/${commands.length}]: ${cmd.command}`);
 
             // Update cached position to new state

@@ -54,6 +54,10 @@
             width: 70px;
             flex: 0 0 70px;
         }
+        .char-input {
+            width: 70px;
+            flex: 0 0 70px;
+        }
         .command-input {
             flex: 1;
         }
@@ -115,6 +119,10 @@
             width: 70px;
             flex: 0 0 70px;
         }
+        .header-row .char-col {
+            width: 70px;
+            flex: 0 0 70px;
+        }
         .header-row .command-col {
             flex: 1;
         }
@@ -169,6 +177,7 @@
         <div class="section-label">Commands</div>
         <div class="header-row">
             <span class="label-col">Label</span>
+            <span class="char-col">Char</span>
             <span class="command-col">Command</span>
         </div>
         <div id="command-list" class="command-list"></div>
@@ -211,7 +220,7 @@
             document.getElementById('focus').checked = settings.focus !== false;
 
             if (commands.length === 0) {
-                commands.push({ label: '', command: '' });
+                commands.push({ label: '', character: '', command: '' });
             }
             renderCommands();
             updateCurrentIndicator();
@@ -236,7 +245,7 @@
                     document.getElementById('character').value = newSettings.character || '';
                     document.getElementById('focus').checked = newSettings.focus !== false;
                     if (commands.length === 0) {
-                        commands.push({ label: '', command: '' });
+                        commands.push({ label: '', character: '', command: '' });
                     }
                     renderCommands();
                     updateCurrentIndicator();
@@ -269,6 +278,15 @@
                 labelInput.dataset.field = 'label';
                 labelInput.addEventListener('input', handleInputChange);
 
+                const charInput = document.createElement('input');
+                charInput.type = 'text';
+                charInput.className = 'char-input' + (isCurrent ? ' current' : '');
+                charInput.placeholder = 'char';
+                charInput.value = cmd.character || '';
+                charInput.dataset.index = index;
+                charInput.dataset.field = 'character';
+                charInput.addEventListener('input', handleInputChange);
+
                 const commandInput = document.createElement('input');
                 commandInput.type = 'text';
                 commandInput.className = 'command-input' + (isCurrent ? ' current' : '');
@@ -285,6 +303,7 @@
                 removeBtn.addEventListener('click', () => removeCommand(index));
 
                 row.appendChild(labelInput);
+                row.appendChild(charInput);
                 row.appendChild(commandInput);
                 row.appendChild(removeBtn);
                 container.appendChild(row);
@@ -309,7 +328,7 @@
         }
 
         function addCommand() {
-            commands.push({ label: '', command: '' });
+            commands.push({ label: '', character: '', command: '' });
             renderCommands();
             updateCurrentIndicator();
             saveSettings();
@@ -318,7 +337,7 @@
         function removeCommand(index) {
             commands.splice(index, 1);
             if (commands.length === 0) {
-                commands.push({ label: '', command: '' });
+                commands.push({ label: '', character: '', command: '' });
             }
             if (currentIndex >= commands.length) {
                 currentIndex = 0;
@@ -339,6 +358,7 @@
             // Keep all commands with content
             const commandsToSave = commands.map(c => ({
                 label: c.label || '',
+                character: c.character || '',
                 command: c.command || ''
             })).filter(c => c.command || c.label);
 
