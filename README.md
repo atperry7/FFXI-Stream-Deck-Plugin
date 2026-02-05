@@ -123,9 +123,11 @@ Rotates through a list of commands. Each press advances to the next command.
 - Rotate between different targets
 - Switch between combat modes
 
-## Long Press to Reset
+## Hold to Reset
 
-Toggle, Sequence, and Cycle actions support a long press (hold 750ms+) to reset state without sending a command. This is useful if a toggle gets out of sync, a sequence gets stuck, or you want to reset a cycle back to the first position.
+Toggle, Sequence, and Cycle actions support a hold-to-reset gesture. Hold the button for 1 second to reset its state without sending a command. This is useful if a toggle gets out of sync, a sequence gets stuck, or you want to reset a cycle back to the first position.
+
+Quick taps work normally with no visual interference. After a 200ms dead zone, a radial progress ring fills around the button icon. When the ring completes and turns green, releasing the button triggers the reset (confirmed with a checkmark). Releasing before the ring completes cancels the reset and executes the normal action instead.
 
 ## Troubleshooting
 

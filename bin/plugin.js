@@ -9,10 +9,95 @@ const runningSequences = new Set();
 // Track cycle positions per context (persisted in settings, but also cached here)
 const cyclePositions = new Map();
 
-// Long press to reset functionality
-const keyPressTimers = new Map();  // Track press start times by context
-const holdFeedbackTimers = new Map();  // Track setTimeout IDs for hold feedback
-const LONG_PRESS_THRESHOLD = 750;  // milliseconds
+// Hold-to-reset functionality
+const keyPressTimers = new Map();       // context -> press start timestamp
+const holdFeedbackTimers = new Map();   // context -> dead zone setTimeout ID
+const holdAnimationTimers = new Map();  // context -> animation setInterval ID
+
+const HOLD_DEAD_ZONE = 200;            // ms before visual feedback begins
+const HOLD_THRESHOLD = 1000;            // ms total to trigger reset
+const HOLD_ANIMATION_FPS = 8;           // frames per second during ring fill
+const HOLD_ANIMATION_DURATION = HOLD_THRESHOLD - HOLD_DEAD_ZONE; // 800ms of animation
+
+/**
+ * Generate an SVG progress ring for hold-to-reset visual feedback.
+ * @param {number} percent - Fill percentage (0-100)
+ * @param {number} size - SVG dimensions in pixels
+ * @param {boolean} complete - If true, ring is green (ready to reset)
+ */
+function generateProgressRingSVG(percent, size = 144, complete = false) {
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = (size / 2) - 8;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference * (1 - percent / 100);
+    const color = complete ? '#44cc44' : '#ff4444';
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${cx}" cy="${cy}" r="${radius}" fill="black"
+                stroke="#333" stroke-width="6"/>
+        <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none"
+                stroke="${color}" stroke-width="6"
+                stroke-dasharray="${circumference}"
+                stroke-dashoffset="${offset}"
+                stroke-linecap="round"
+                transform="rotate(-90 ${cx} ${cy})"/>
+    </svg>`;
+}
+
+/**
+ * Start hold-to-reset detection on key down.
+ * After HOLD_DEAD_ZONE ms, begins animating a progress ring on the button.
+ */
+function startHoldDetection(context, action) {
+    keyPressTimers.set(context, Date.now());
+    holdFeedbackTimers.set(context, setTimeout(() => {
+        startProgressAnimation(context, action);
+    }, HOLD_DEAD_ZONE));
+}
+
+/**
+ * Begin the radial progress ring animation after the dead zone elapses.
+ */
+function startProgressAnimation(context, action) {
+    const animStart = Date.now();
+
+    const tick = async () => {
+        const elapsed = Date.now() - animStart;
+        const progress = Math.min(100, (elapsed / HOLD_ANIMATION_DURATION) * 100);
+        const complete = progress >= 100;
+        const svg = generateProgressRingSVG(progress, 144, complete);
+        const imageData = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+        await action.setImage(imageData);
+        await action.setTitle("");
+
+        if (complete) {
+            clearInterval(holdAnimationTimers.get(context));
+        }
+    };
+
+    // Run first frame immediately, then continue at HOLD_ANIMATION_FPS
+    tick();
+    holdAnimationTimers.set(context, setInterval(tick, 1000 / HOLD_ANIMATION_FPS));
+}
+
+/**
+ * End hold-to-reset detection on key up.
+ * Clears all timers and returns the total press duration in ms.
+ */
+function endHoldDetection(context) {
+    const feedbackTimer = holdFeedbackTimers.get(context);
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+    holdFeedbackTimers.delete(context);
+
+    const animTimer = holdAnimationTimers.get(context);
+    if (animTimer) clearInterval(animTimer);
+    holdAnimationTimers.delete(context);
+
+    const startTime = keyPressTimers.get(context);
+    keyPressTimers.delete(context);
+    return startTime ? Date.now() - startTime : 0;
+}
 
 /**
  * Sleep utility for delays between commands
@@ -101,51 +186,37 @@ streamDeck.actions.registerAction({
 
 /**
  * Toggle Command action - toggles between two commands with visual state
- * Long press (750ms+) resets to OFF state without sending command
+ * Hold (1s+) resets to OFF state without sending command
  */
 streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.toggle",
 
     onKeyDown: async (event) => {
-        const context = event.action.id;
-        keyPressTimers.set(context, Date.now());
-        await event.action.setTitle("Hold...");
-        holdFeedbackTimers.set(context, setTimeout(() => {
-            event.action.setTitle("RESET!");
-        }, LONG_PRESS_THRESHOLD));
+        startHoldDetection(event.action.id, event.action);
     },
 
     onKeyUp: async (event) => {
         const context = event.action.id;
-        const startTime = keyPressTimers.get(context);
-        keyPressTimers.delete(context);
+        const pressDuration = endHoldDetection(context);
+        const currentState = event.payload.state; // 0 = off, 1 = on
 
-        const feedbackTimer = holdFeedbackTimers.get(context);
-        if (feedbackTimer) clearTimeout(feedbackTimer);
-        holdFeedbackTimers.delete(context);
-
-        // Clear the "Hold..." title
-        await event.action.setTitle("");
-
-        const pressDuration = startTime ? Date.now() - startTime : 0;
+        // Restore original image if hold entered visual feedback phase
+        if (pressDuration > HOLD_DEAD_ZONE) {
+            await event.action.setImage(currentState === 0 ? 'imgs/action-off' : 'imgs/action-on');
+        }
 
         // Long press: reset to OFF state
-        if (pressDuration >= LONG_PRESS_THRESHOLD) {
+        if (pressDuration >= HOLD_THRESHOLD) {
             streamDeck.logger.info('Toggle reset to OFF state');
             await event.action.setState(0);
-            await event.action.setTitle("RESET!");
-            setTimeout(() => {
-                event.action.setTitle("");
-            }, 500);
+            await event.action.showOk();
             return;
         }
 
         // Short press: normal toggle behavior
         const settings = event.payload.settings;
         const { command_on, command_off } = settings;
-        const currentState = event.payload.state; // 0 = off, 1 = on
 
-        // Determine which command to send based on current state
         // State 0 (OFF): send command_on to activate
         // State 1 (ON): send command_off to deactivate
         const command = currentState === 0 ? command_on : command_off;
@@ -170,7 +241,7 @@ streamDeck.actions.registerAction({
 
 /**
  * Sequence Command action - executes multiple commands in sequence with delays
- * Long press (750ms+) clears stuck sequence guard without sending commands
+ * Hold (1s+) clears stuck sequence guard without sending commands
  */
 streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.sequence",
@@ -178,42 +249,30 @@ streamDeck.actions.registerAction({
     onKeyDown: async (event) => {
         const context = event.action.id;
 
-        // Don't show "Hold..." if sequence is already running (would interfere with progress)
+        // Don't start hold detection if sequence is running (would interfere with progress)
         if (!runningSequences.has(context)) {
-            keyPressTimers.set(context, Date.now());
-            await event.action.setTitle("Hold...");
-            holdFeedbackTimers.set(context, setTimeout(() => {
-                event.action.setTitle("RESET!");
-            }, LONG_PRESS_THRESHOLD));
+            startHoldDetection(context, event.action);
         }
     },
 
     onKeyUp: async (event) => {
         const context = event.action.id;
-        const startTime = keyPressTimers.get(context);
-        keyPressTimers.delete(context);
+        const pressDuration = endHoldDetection(context);
 
-        const feedbackTimer = holdFeedbackTimers.get(context);
-        if (feedbackTimer) clearTimeout(feedbackTimer);
-        holdFeedbackTimers.delete(context);
-
-        const pressDuration = startTime ? Date.now() - startTime : 0;
+        // Restore original image if hold entered visual feedback phase
+        if (pressDuration > HOLD_DEAD_ZONE && !runningSequences.has(context)) {
+            await event.action.setImage('imgs/action-sequence');
+        }
 
         // Long press: clear from runningSequences (in case stuck)
-        if (pressDuration >= LONG_PRESS_THRESHOLD) {
+        if (pressDuration >= HOLD_THRESHOLD) {
             const wasRunning = runningSequences.has(context);
             runningSequences.delete(context);
             streamDeck.logger.info(`Sequence reset${wasRunning ? ' (was stuck)' : ''}`);
-            await event.action.setTitle("RESET!");
-            setTimeout(() => {
-                event.action.setTitle("");
-            }, 500);
-            return;
-        }
-
-        // Clear "Hold..." if it was showing (sequence wasn't running)
-        if (startTime && !runningSequences.has(context)) {
+            await event.action.setImage('imgs/action-sequence');
             await event.action.setTitle("");
+            await event.action.showOk();
+            return;
         }
 
         // Short press: run sequence
@@ -275,7 +334,7 @@ streamDeck.actions.registerAction({
 
 /**
  * Cycle Command action - cycles through a list of commands
- * Long press (750ms+) resets to first position without sending command
+ * Hold (1s+) resets to first position without sending command
  */
 streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.cycle",
@@ -319,52 +378,50 @@ streamDeck.actions.registerAction({
     },
 
     onKeyDown: async (event) => {
-        const context = event.action.id;
-        keyPressTimers.set(context, Date.now());
-        await event.action.setTitle("Hold...");
-        holdFeedbackTimers.set(context, setTimeout(() => {
-            event.action.setTitle("RESET!");
-        }, LONG_PRESS_THRESHOLD));
+        startHoldDetection(event.action.id, event.action);
     },
 
     onKeyUp: async (event) => {
         const context = event.action.id;
-        const startTime = keyPressTimers.get(context);
-        keyPressTimers.delete(context);
-
-        const feedbackTimer = holdFeedbackTimers.get(context);
-        if (feedbackTimer) clearTimeout(feedbackTimer);
-        holdFeedbackTimers.delete(context);
+        const pressDuration = endHoldDetection(context);
 
         const settings = event.payload.settings;
         const commands = settings.commands || [];
         const showLabel = settings.showLabel !== false;
 
-        const pressDuration = startTime ? Date.now() - startTime : 0;
+        // Restore original image/label if hold entered visual feedback phase
+        if (pressDuration > HOLD_DEAD_ZONE) {
+            await event.action.setImage('imgs/action-cycle');
+            // Restore the current label
+            const currentIndex = cyclePositions.get(context) ?? (parseInt(settings.currentIndex) || 0);
+            if (showLabel && commands.length > 0) {
+                const safeIndex = currentIndex % commands.length;
+                const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
+                await event.action.setTitle(label);
+            } else {
+                await event.action.setTitle("");
+            }
+        }
 
         // Long press: reset to first position (index 0)
-        if (pressDuration >= LONG_PRESS_THRESHOLD) {
+        if (pressDuration >= HOLD_THRESHOLD) {
             streamDeck.logger.info('Cycle reset to position 0');
 
-            // Reset to index 0
             cyclePositions.set(context, 0);
 
-            // Persist reset index to settings
             await event.action.setSettings({
                 ...settings,
                 currentIndex: 0
             });
 
-            // Show reset feedback, then show first label
-            await event.action.setTitle("RESET!");
-            setTimeout(async () => {
-                if (showLabel && commands.length > 0) {
-                    const label = commands[0]?.label || "1";
-                    await event.action.setTitle(label);
-                } else {
-                    await event.action.setTitle("");
-                }
-            }, 500);
+            // Restore first label, then show checkmark confirmation
+            if (showLabel && commands.length > 0) {
+                const label = commands[0]?.label || "1";
+                await event.action.setTitle(label);
+            } else {
+                await event.action.setTitle("");
+            }
+            await event.action.showOk();
             return;
         }
 
@@ -372,7 +429,6 @@ streamDeck.actions.registerAction({
         if (commands.length === 0) {
             streamDeck.logger.warn('No commands configured for cycle');
             await event.action.showAlert();
-            await event.action.setTitle("");
             return;
         }
 
@@ -387,13 +443,6 @@ streamDeck.actions.registerAction({
         if (!cmd?.command) {
             streamDeck.logger.warn('Empty command in cycle');
             await event.action.showAlert();
-            if (showLabel && commands.length > 0) {
-                const safeIndex = currentIndex % commands.length;
-                const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
-                await event.action.setTitle(label);
-            } else {
-                await event.action.setTitle("");
-            }
             return;
         }
 
