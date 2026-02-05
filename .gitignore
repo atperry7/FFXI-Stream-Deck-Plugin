@@ -22,3 +22,5 @@ desktop.ini
 
 # Lock files (optional - remove if you want to commit)
 # package-lock.json
+NUL
+.claude/settings.local.json

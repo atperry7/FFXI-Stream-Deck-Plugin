@@ -50,6 +50,10 @@
             width: 70px;
             flex: 0 0 70px;
         }
+        .char-input {
+            width: 70px;
+            flex: 0 0 70px;
+        }
         .command-input {
             flex: 1;
         }
@@ -99,6 +103,10 @@
             width: 70px;
             flex: 0 0 70px;
         }
+        .header-row .char-col {
+            width: 70px;
+            flex: 0 0 70px;
+        }
         .header-row .command-col {
             flex: 1;
         }
@@ -136,9 +144,28 @@
 </head>
 <body>
     <div class="section">
+        <div class="section-label">Target</div>
+        <div class="form-row">
+            <div class="form-label">Character</div>
+            <div class="form-input">
+                <input type="text" id="character" placeholder="(optional) name or @all">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-label">Focus Mode</div>
+            <div class="form-input" style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="focus" checked style="width: 16px; height: 16px; accent-color: #e94560;">
+                <label for="focus" style="cursor: pointer;">Send to focused window</label>
+            </div>
+        </div>
+        <div class="hint" style="margin-left: 80px;">Character name overrides focus mode</div>
+    </div>
+
+    <div class="section">
         <div class="section-label">Commands</div>
         <div class="header-row">
             <span class="label-col">Label</span>
+            <span class="char-col">Char</span>
             <span class="command-col">Command</span>
         </div>
         <div id="command-list" class="command-list"></div>
@@ -184,9 +211,11 @@
             commands = Array.isArray(settings.commands) ? settings.commands.slice() : [];
             document.getElementById('delay').value = settings.delay ?? 500;
             document.getElementById('onError').value = settings.onError || 'stop';
+            document.getElementById('character').value = settings.character || '';
+            document.getElementById('focus').checked = settings.focus !== false;
 
             if (commands.length === 0) {
-                commands.push({ label: '', command: '' });
+                commands.push({ label: '', character: '', command: '' });
             }
             renderCommands();
 
@@ -207,16 +236,20 @@
                     commands = Array.isArray(newSettings.commands) ? newSettings.commands.slice() : [];
                     document.getElementById('delay').value = newSettings.delay ?? 500;
                     document.getElementById('onError').value = newSettings.onError || 'stop';
+                    document.getElementById('character').value = newSettings.character || '';
+                    document.getElementById('focus').checked = newSettings.focus !== false;
                     if (commands.length === 0) {
-                        commands.push({ label: '', command: '' });
+                        commands.push({ label: '', character: '', command: '' });
                     }
                     renderCommands();
                 }
             };
 
-            // Add change listeners for delay and onError
+            // Add change listeners
             document.getElementById('delay').addEventListener('change', saveSettings);
             document.getElementById('onError').addEventListener('change', saveSettings);
+            document.getElementById('character').addEventListener('input', saveSettings);
+            document.getElementById('focus').addEventListener('change', saveSettings);
         }
 
         function renderCommands() {
@@ -236,6 +269,15 @@
                 labelInput.dataset.field = 'label';
                 labelInput.addEventListener('input', handleInputChange);
 
+                const charInput = document.createElement('input');
+                charInput.type = 'text';
+                charInput.className = 'char-input';
+                charInput.placeholder = 'char';
+                charInput.value = cmd.character || '';
+                charInput.dataset.index = index;
+                charInput.dataset.field = 'character';
+                charInput.addEventListener('input', handleInputChange);
+
                 const commandInput = document.createElement('input');
                 commandInput.type = 'text';
                 commandInput.className = 'command-input';
@@ -252,6 +294,7 @@
                 removeBtn.addEventListener('click', () => removeCommand(index));
 
                 row.appendChild(labelInput);
+                row.appendChild(charInput);
                 row.appendChild(commandInput);
                 row.appendChild(removeBtn);
                 container.appendChild(row);
@@ -266,7 +309,7 @@
         }
 
         function addCommand() {
-            commands.push({ label: '', command: '' });
+            commands.push({ label: '', character: '', command: '' });
             renderCommands();
             saveSettings();
         }
@@ -274,7 +317,7 @@
         function removeCommand(index) {
             commands.splice(index, 1);
             if (commands.length === 0) {
-                commands.push({ label: '', command: '' });
+                commands.push({ label: '', character: '', command: '' });
             }
             renderCommands();
             saveSettings();
@@ -285,13 +328,16 @@
             // Filter only when sending to preserve what user sees
             const commandsToSave = commands.map(c => ({
                 label: c.label || '',
+                character: c.character || '',
                 command: c.command || ''
             })).filter(c => c.command || c.label);
 
             const newSettings = {
                 commands: commandsToSave,
                 delay: parseInt(document.getElementById('delay').value) || 500,
-                onError: document.getElementById('onError').value || 'stop'
+                onError: document.getElementById('onError').value || 'stop',
+                character: document.getElementById('character').value,
+                focus: document.getElementById('focus').checked
             };
 
             if (websocket && websocket.readyState === WebSocket.OPEN) {

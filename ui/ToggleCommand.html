@@ -3,9 +3,51 @@
 <head>
     <meta charset="utf-8" />
     <title>Toggle Command</title>
-    <link rel="stylesheet" href="https://sdpi-components.dev/releases/v3/sdpi-components.css">
-    <script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
     <style>
+        body {
+            background-color: #2d2d2d;
+            color: #d8d8d8;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 12px;
+            margin: 0;
+            padding: 8px;
+        }
+        .form-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .form-label {
+            width: 100px;
+            flex: 0 0 100px;
+            color: #9b9b9b;
+            font-size: 11px;
+        }
+        .form-input {
+            flex: 1;
+        }
+        .form-input input[type="text"] {
+            width: 100%;
+            background: #3b3b3b;
+            color: #d8d8d8;
+            border: 1px solid #4a4a4a;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            box-sizing: border-box;
+        }
+        .form-input input[type="text"]:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        .form-input input[type="text"]::placeholder {
+            color: #6b6b6b;
+        }
+        .hint {
+            font-size: 10px;
+            color: #6b6b6b;
+            margin-top: 2px;
+        }
         code {
             background: rgba(255,255,255,0.1);
             padding: 2px 5px;
@@ -27,45 +69,133 @@
         li {
             margin-bottom: 6px;
         }
-        .hint {
-            font-size: 10px;
-            color: #888;
-            margin-top: 2px;
-        }
     </style>
 </head>
 <body>
-    <sdpi-item label="Command (Off → On)">
-        <sdpi-textfield
-            setting="command_on"
-            placeholder='input /ja "Sneak Attack" <me>'>
-        </sdpi-textfield>
-        <div class="hint">Sent when activating (turning ON)</div>
-    </sdpi-item>
+    <div class="form-row">
+        <div class="form-label">Character</div>
+        <div class="form-input">
+            <input type="text" id="character" placeholder="(optional) name or @all">
+        </div>
+    </div>
 
-    <sdpi-item label="Command (On → Off)">
-        <sdpi-textfield
-            setting="command_off"
-            placeholder='input /echo SA Ready'>
-        </sdpi-textfield>
-        <div class="hint">Sent when deactivating (turning OFF)</div>
-    </sdpi-item>
+    <div class="form-row">
+        <div class="form-label">Focus Mode</div>
+        <div class="form-input" style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="focus" checked style="width: 16px; height: 16px; accent-color: #e94560;">
+            <label for="focus" style="cursor: pointer;">Send to focused window</label>
+        </div>
+    </div>
 
-    <sdpi-item label="">
-        <details>
-            <summary>Toggle Examples</summary>
-            <ul>
-                <li><strong>Sneak Attack Toggle:</strong><br>
-                    On: <code>input /ja "Sneak Attack" &lt;me&gt;</code><br>
-                    Off: <code>input /echo SA Ready</code></li>
-                <li><strong>GearSwap Mode:</strong><br>
-                    On: <code>gs c set MeleeMode Acc</code><br>
-                    Off: <code>gs c set MeleeMode Normal</code></li>
-                <li><strong>Follow Toggle:</strong><br>
-                    On: <code>input /follow &lt;t&gt;</code><br>
-                    Off: <code>input /heal</code></li>
-            </ul>
-        </details>
-    </sdpi-item>
+    <div class="form-row">
+        <div class="form-label">Command (Off → On)</div>
+        <div class="form-input">
+            <input type="text" id="command_on" placeholder='input /ja "Sneak Attack" <me>'>
+        </div>
+    </div>
+    <div class="hint" style="margin-left: 100px;">Sent when activating (turning ON)</div>
+
+    <div class="form-row" style="margin-top: 8px;">
+        <div class="form-label">Command (On → Off)</div>
+        <div class="form-input">
+            <input type="text" id="command_off" placeholder='input /echo SA Ready'>
+        </div>
+    </div>
+    <div class="hint" style="margin-left: 100px;">Sent when deactivating (turning OFF)</div>
+
+    <div class="form-row" style="margin-top: 8px;">
+        <div class="form-label"></div>
+        <div class="form-input">
+            <details>
+                <summary>Toggle Examples</summary>
+                <ul>
+                    <li><strong>Sneak Attack Toggle:</strong><br>
+                        On: <code>input /ja "Sneak Attack" &lt;me&gt;</code><br>
+                        Off: <code>input /echo SA Ready</code></li>
+                    <li><strong>GearSwap Mode:</strong><br>
+                        On: <code>gs c set MeleeMode Acc</code><br>
+                        Off: <code>gs c set MeleeMode Normal</code></li>
+                    <li><strong>Follow Toggle:</strong><br>
+                        On: <code>input /follow &lt;t&gt;</code><br>
+                        Off: <code>input /heal</code></li>
+                </ul>
+            </details>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-label"></div>
+        <div class="form-input">
+            <details>
+                <summary>Targeting</summary>
+                <ul>
+                    <li><strong>Focus Mode ON</strong> (default): Command is sent to whichever FFXI window currently has focus.</li>
+                    <li><strong>Focus Mode OFF</strong>: Command executes directly on the server character, even without focus.</li>
+                    <li><strong>Character name</strong>: Overrides Focus Mode. The command is sent to the named character via IPC. Use <code>@all</code> to send to every character.</li>
+                </ul>
+            </details>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let uuid = null;
+
+        function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+            uuid = inPropertyInspectorUUID;
+            const actionInfo = JSON.parse(inActionInfo);
+            const settings = actionInfo.payload.settings || {};
+
+            // Load existing settings
+            document.getElementById('character').value = settings.character || '';
+            document.getElementById('focus').checked = settings.focus !== false;
+            document.getElementById('command_on').value = settings.command_on || '';
+            document.getElementById('command_off').value = settings.command_off || '';
+
+            // Connect to Stream Deck
+            websocket = new WebSocket('ws://127.0.0.1:' + inPort);
+
+            websocket.onopen = function() {
+                websocket.send(JSON.stringify({
+                    event: inRegisterEvent,
+                    uuid: inPropertyInspectorUUID
+                }));
+            };
+
+            websocket.onmessage = function(evt) {
+                const data = JSON.parse(evt.data);
+                if (data.event === 'didReceiveSettings') {
+                    const newSettings = data.payload.settings || {};
+                    document.getElementById('character').value = newSettings.character || '';
+                    document.getElementById('focus').checked = newSettings.focus !== false;
+                    document.getElementById('command_on').value = newSettings.command_on || '';
+                    document.getElementById('command_off').value = newSettings.command_off || '';
+                }
+            };
+
+            // Add change listeners
+            document.getElementById('character').addEventListener('input', saveSettings);
+            document.getElementById('focus').addEventListener('change', saveSettings);
+            document.getElementById('command_on').addEventListener('input', saveSettings);
+            document.getElementById('command_off').addEventListener('input', saveSettings);
+        }
+
+        function saveSettings() {
+            const newSettings = {
+                character: document.getElementById('character').value,
+                focus: document.getElementById('focus').checked,
+                command_on: document.getElementById('command_on').value,
+                command_off: document.getElementById('command_off').value
+            };
+
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    event: 'setSettings',
+                    context: uuid,
+                    payload: newSettings
+                }));
+            }
+        }
+    </script>
 </body>
 </html>

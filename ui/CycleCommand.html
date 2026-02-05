@@ -54,6 +54,10 @@
             width: 70px;
             flex: 0 0 70px;
         }
+        .char-input {
+            width: 70px;
+            flex: 0 0 70px;
+        }
         .command-input {
             flex: 1;
         }
@@ -115,6 +119,10 @@
             width: 70px;
             flex: 0 0 70px;
         }
+        .header-row .char-col {
+            width: 70px;
+            flex: 0 0 70px;
+        }
         .header-row .command-col {
             flex: 1;
         }
@@ -148,9 +156,28 @@
 </head>
 <body>
     <div class="section">
+        <div class="section-label">Target</div>
+        <div class="form-row">
+            <div class="form-label" style="width: 80px; flex: 0 0 80px; color: #9b9b9b; font-size: 11px;">Character</div>
+            <div style="flex: 1;">
+                <input type="text" id="character" placeholder="(optional) name or @all" style="width: 100%; background: #3b3b3b; color: #d8d8d8; border: 1px solid #4a4a4a; padding: 6px 8px; border-radius: 4px; font-size: 12px; box-sizing: border-box;">
+            </div>
+        </div>
+        <div class="form-row">
+            <div style="width: 80px; flex: 0 0 80px; color: #9b9b9b; font-size: 11px;">Focus Mode</div>
+            <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="focus" checked style="width: 16px; height: 16px; accent-color: #e94560;">
+                <label for="focus" style="cursor: pointer;">Send to focused window</label>
+            </div>
+        </div>
+        <div class="hint" style="margin-left: 80px;">Character name overrides focus mode</div>
+    </div>
+
+    <div class="section">
         <div class="section-label">Commands</div>
         <div class="header-row">
             <span class="label-col">Label</span>
+            <span class="char-col">Char</span>
             <span class="command-col">Command</span>
         </div>
         <div id="command-list" class="command-list"></div>
@@ -189,9 +216,11 @@
             commands = Array.isArray(settings.commands) ? settings.commands.slice() : [];
             currentIndex = parseInt(settings.currentIndex) || 0;
             document.getElementById('showLabel').checked = settings.showLabel !== false;
+            document.getElementById('character').value = settings.character || '';
+            document.getElementById('focus').checked = settings.focus !== false;
 
             if (commands.length === 0) {
-                commands.push({ label: '', command: '' });
+                commands.push({ label: '', character: '', command: '' });
             }
             renderCommands();
             updateCurrentIndicator();
@@ -213,16 +242,20 @@
                     commands = Array.isArray(newSettings.commands) ? newSettings.commands.slice() : [];
                     currentIndex = parseInt(newSettings.currentIndex) || 0;
                     document.getElementById('showLabel').checked = newSettings.showLabel !== false;
+                    document.getElementById('character').value = newSettings.character || '';
+                    document.getElementById('focus').checked = newSettings.focus !== false;
                     if (commands.length === 0) {
-                        commands.push({ label: '', command: '' });
+                        commands.push({ label: '', character: '', command: '' });
                     }
                     renderCommands();
                     updateCurrentIndicator();
                 }
             };
 
-            // Add change listener for showLabel
+            // Add change listeners
             document.getElementById('showLabel').addEventListener('change', saveSettings);
+            document.getElementById('character').addEventListener('input', saveSettings);
+            document.getElementById('focus').addEventListener('change', saveSettings);
         }
 
         function renderCommands() {
@@ -245,6 +278,15 @@
                 labelInput.dataset.field = 'label';
                 labelInput.addEventListener('input', handleInputChange);
 
+                const charInput = document.createElement('input');
+                charInput.type = 'text';
+                charInput.className = 'char-input' + (isCurrent ? ' current' : '');
+                charInput.placeholder = 'char';
+                charInput.value = cmd.character || '';
+                charInput.dataset.index = index;
+                charInput.dataset.field = 'character';
+                charInput.addEventListener('input', handleInputChange);
+
                 const commandInput = document.createElement('input');
                 commandInput.type = 'text';
                 commandInput.className = 'command-input' + (isCurrent ? ' current' : '');
@@ -261,6 +303,7 @@
                 removeBtn.addEventListener('click', () => removeCommand(index));
 
                 row.appendChild(labelInput);
+                row.appendChild(charInput);
                 row.appendChild(commandInput);
                 row.appendChild(removeBtn);
                 container.appendChild(row);
@@ -285,7 +328,7 @@
         }
 
         function addCommand() {
-            commands.push({ label: '', command: '' });
+            commands.push({ label: '', character: '', command: '' });
             renderCommands();
             updateCurrentIndicator();
             saveSettings();
@@ -294,7 +337,7 @@
         function removeCommand(index) {
             commands.splice(index, 1);
             if (commands.length === 0) {
-                commands.push({ label: '', command: '' });
+                commands.push({ label: '', character: '', command: '' });
             }
             if (currentIndex >= commands.length) {
                 currentIndex = 0;
@@ -315,13 +358,16 @@
             // Keep all commands with content
             const commandsToSave = commands.map(c => ({
                 label: c.label || '',
+                character: c.character || '',
                 command: c.command || ''
             })).filter(c => c.command || c.label);
 
             const newSettings = {
                 commands: commandsToSave,
                 currentIndex: currentIndex,
-                showLabel: document.getElementById('showLabel').checked
+                showLabel: document.getElementById('showLabel').checked,
+                character: document.getElementById('character').value,
+                focus: document.getElementById('focus').checked
             };
 
             if (websocket && websocket.readyState === WebSocket.OPEN) {
