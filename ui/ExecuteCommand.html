@@ -30,13 +30,26 @@
     </style>
 </head>
 <body>
+    <sdpi-item label="Character">
+        <sdpi-textfield
+            setting="character"
+            placeholder="(optional) name or @all">
+        </sdpi-textfield>
+    </sdpi-item>
+
+    <sdpi-item label="Focus Mode">
+        <sdpi-checkbox setting="focus" default checked>
+            Send to focused window
+        </sdpi-checkbox>
+    </sdpi-item>
+
     <sdpi-item label="Command">
-        <sdpi-textfield 
-            setting="command" 
+        <sdpi-textfield
+            setting="command"
             placeholder='input /ma "Cure" <t>'>
         </sdpi-textfield>
     </sdpi-item>
-    
+
     <sdpi-item label="">
         <details>
             <summary>Command Examples</summary>
@@ -47,6 +60,17 @@
                 <li><code>send Whitey input /ma "Cure IV" &lt;me&gt;</code> - Send to alt</li>
                 <li><code>lua r gearswap</code> - Reload addon</li>
                 <li><code>gs c toggle</code> - GearSwap command</li>
+            </ul>
+        </details>
+    </sdpi-item>
+
+    <sdpi-item label="">
+        <details>
+            <summary>Targeting</summary>
+            <ul>
+                <li><strong>Focus Mode ON</strong> (default): Command is sent to whichever FFXI window currently has focus.</li>
+                <li><strong>Focus Mode OFF</strong>: Command executes directly on the server character, even without focus. Useful for commands like <code>switch_focus</code>.</li>
+                <li><strong>Character name</strong>: Overrides Focus Mode. The command is sent to the named character via IPC. Use <code>@all</code> to send to every character.</li>
             </ul>
         </details>
     </sdpi-item>

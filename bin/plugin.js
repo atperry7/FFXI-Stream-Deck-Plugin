@@ -23,6 +23,24 @@ function sleep(ms) {
 streamDeck.logger.setLevel(LogLevel.DEBUG);
 
 /**
+ * Determine the routing target from button settings.
+ * Priority: character field > focus checkbox > @server
+ */
+function getTarget(settings) {
+    const character = (settings.character || '').trim();
+    if (character) return character;
+    return settings.focus !== false ? '@focus' : '@server';
+}
+
+/**
+ * Format a command with its routing target for the TCP protocol.
+ * Format: <target>|<command>
+ */
+function formatCommand(settings, command) {
+    return `${getTarget(settings)}|${command}`;
+}
+
+/**
  * Send a command to the Windower StreamDeckBridge addon
  */
 function sendToWindower(command) {
@@ -56,16 +74,17 @@ streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.execute",
     
     onKeyDown: async (event) => {
-        const { command } = event.payload.settings;
-        
+        const settings = event.payload.settings;
+        const { command } = settings;
+
         if (!command) {
             streamDeck.logger.warn('No command configured for this button');
             await event.action.showAlert();
             return;
         }
-        
+
         try {
-            await sendToWindower(command);
+            await sendToWindower(formatCommand(settings, command));
             streamDeck.logger.info(`Sent: ${command}`);
             // Brief green flash feedback
             await event.action.setImage('imgs/action-on');
@@ -114,7 +133,8 @@ streamDeck.actions.registerAction({
         }
 
         // Short press: normal toggle behavior
-        const { command_on, command_off } = event.payload.settings;
+        const settings = event.payload.settings;
+        const { command_on, command_off } = settings;
         const currentState = event.payload.state; // 0 = off, 1 = on
 
         // Determine which command to send based on current state
@@ -130,7 +150,7 @@ streamDeck.actions.registerAction({
         }
 
         try {
-            await sendToWindower(command);
+            await sendToWindower(formatCommand(settings, command));
             streamDeck.logger.info(`Toggle sent: ${command}`);
             await event.action.setState(nextState);
         } catch (err) {
@@ -211,7 +231,7 @@ streamDeck.actions.registerAction({
                 await event.action.setTitle(titleText);
 
                 try {
-                    await sendToWindower(cmd.command);
+                    await sendToWindower(formatCommand(settings, cmd.command));
                     streamDeck.logger.info(`Sequence [${i + 1}/${commands.length}]: ${cmd.command}`);
                 } catch (err) {
                     streamDeck.logger.error(`Sequence command failed: ${err.message}`);
@@ -356,7 +376,7 @@ streamDeck.actions.registerAction({
 
         try {
             // Execute the NEW state's command
-            await sendToWindower(cmd.command);
+            await sendToWindower(formatCommand(settings, cmd.command));
             streamDeck.logger.info(`Cycle to [${nextIndex + 1}/${commands.length}]: ${cmd.command}`);
 
             // Update cached position to new state

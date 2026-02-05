@@ -8,6 +8,7 @@ Control Final Fantasy XI through your Elgato Stream Deck. Send commands directly
 - **Toggle Command** - Switch between two states (e.g., enable/disable a setting)
 - **Sequence Command** - Execute multiple commands in order with configurable delays
 - **Cycle Command** - Rotate through a list of commands (e.g., cycle through targets or gear sets)
+- **Per-button targeting** - Route commands to the focused window, a specific character, or all characters
 
 ## Requirements
 
@@ -24,13 +25,32 @@ The plugin communicates with Windower through the StreamDeckBridge addon, which 
 1. Download the StreamDeckBridge addon
 2. Place it in your `Windower4/addons/` folder
 3. Load it in-game: `//lua load streamdeckbridge`
-4. (Optional) Add to your `Windower4/scripts/init.txt` for auto-loading
+4. Set the server character: `//sdb enable`
+5. (Optional) Add to your `Windower4/scripts/init.txt` for auto-loading
+6. Load the addon on all other characters that should receive targeted commands
 
 ## Installation
 
 1. Download the latest `.streamDeckPlugin` file from [Releases](../../releases)
 2. Double-click the file to install
 3. The "FFXI" category will appear in your Stream Deck actions
+
+## Command Targeting
+
+Every button has two targeting fields:
+
+| Setting | Description |
+|---------|-------------|
+| **Character** | (Optional) A character name, or `@all` to target every character |
+| **Focus Mode** | When checked (default), commands are sent to whichever FFXI window has focus |
+
+**Routing priority:**
+
+1. If **Character** has a value, the command is sent to that character (or `@all` for everyone)
+2. If **Focus Mode** is checked and Character is empty, the command runs on the focused window
+3. If **Focus Mode** is unchecked and Character is empty, the command runs directly on the server character
+
+This means you can have buttons that always target a specific alt, buttons that follow focus, and buttons that reliably execute on the server regardless of which window is active (useful for commands like `switch_focus`).
 
 ## Actions
 
@@ -40,6 +60,8 @@ Sends a single command to Windower when pressed.
 
 | Setting | Description |
 |---------|-------------|
+| Character | (Optional) Target character name or `@all` |
+| Focus Mode | Send to focused window (default: on) |
 | Command | The Windower command to execute |
 
 **Examples:**
@@ -55,6 +77,8 @@ Alternates between two commands, with visual ON/OFF state.
 
 | Setting | Description |
 |---------|-------------|
+| Character | (Optional) Target character name or `@all` |
+| Focus Mode | Send to focused window (default: on) |
 | ON Command | Command to send when turning ON |
 | OFF Command | Command to send when turning OFF |
 
@@ -69,12 +93,14 @@ Executes multiple commands in order with a delay between each.
 
 | Setting | Description |
 |---------|-------------|
+| Character | (Optional) Target character name or `@all` |
+| Focus Mode | Send to focused window (default: on) |
 | Commands | List of commands to execute in order |
 | Delay | Milliseconds to wait between commands (default: 500) |
 | On Error | `Stop` or `Continue` if a command fails |
 
 **Use cases:**
-- Chain buffs: Protect → Shell → Haste
+- Chain buffs: Protect -> Shell -> Haste
 - Execute a series of setup commands
 - Automated crafting sequences
 
@@ -86,6 +112,8 @@ Rotates through a list of commands. Each press advances to the next command.
 
 | Setting | Description |
 |---------|-------------|
+| Character | (Optional) Target character name or `@all` |
+| Focus Mode | Send to focused window (default: on) |
 | Commands | List of commands with optional labels |
 | Show Label | Display the current position on the button |
 | Reset Position | Button to reset back to the first command |
@@ -94,6 +122,10 @@ Rotates through a list of commands. Each press advances to the next command.
 - Cycle through gear sets
 - Rotate between different targets
 - Switch between combat modes
+
+## Long Press to Reset
+
+Toggle, Sequence, and Cycle actions support a long press (hold 750ms+) to reset state without sending a command. This is useful if a toggle gets out of sync, a sequence gets stuck, or you want to reset a cycle back to the first position.
 
 ## Troubleshooting
 
@@ -108,6 +140,11 @@ Rotates through a list of commands. Each press advances to the next command.
 - Test commands manually in Windower first (e.g., `//input /wave`)
 - Check the StreamDeckBridge addon is responding: `//lua r streamdeckbridge`
 - Verify the command syntax is correct
+
+### Commands not reaching a specific character
+
+- Make sure StreamDeckBridge is loaded on the target character
+- Check that the Character field matches the in-game name exactly (case-insensitive)
 
 ### Connection timeout
 
