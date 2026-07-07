@@ -13,7 +13,7 @@ Control Final Fantasy XI through your Elgato Stream Deck. Send commands directly
 ## Requirements
 
 - Windows 10 or later
-- Elgato Stream Deck software 6.0+
+- Elgato Stream Deck software 6.4+
 - [Windower 4](https://www.windower.net/) for FFXI
 - **StreamDeckBridge addon** for Windower (required for communication)
   - https://github.com/atperry7/StreamDeckBridge
@@ -125,7 +125,11 @@ Rotates through a list of commands. Each press advances to the next command.
 
 ## Hold to Reset
 
-Toggle, Sequence, and Cycle actions support a hold-to-reset gesture. Hold the button for 1 second to reset its state without sending a command. This is useful if a toggle gets out of sync, a sequence gets stuck, or you want to reset a cycle back to the first position.
+Toggle, Sequence, and Cycle actions support a hold gesture. Hold the button for 1 second to reset its state without sending a command:
+
+- **Toggle** - Resets to the OFF state (useful if the toggle gets out of sync with the game)
+- **Sequence** - Cancels a running sequence mid-flight (takes effect within ~100ms, even during a delay)
+- **Cycle** - Resets back to the first position
 
 Quick taps work normally with no visual interference. After a 200ms dead zone, a radial progress ring fills around the button icon. When the ring completes and turns green, releasing the button triggers the reset (confirmed with a checkmark). Releasing before the ring completes cancels the reset and executes the normal action instead.
 
@@ -148,16 +152,16 @@ Quick taps work normally with no visual interference. After a 200ms dead zone, a
 - Make sure StreamDeckBridge is loaded on the target character
 - Check that the Character field matches the in-game name exactly (case-insensitive)
 
-### Connection timeout
+### Connection behavior
 
-The plugin uses a 2-second timeout. If Windower is busy (loading, zoning), commands may timeout. Try again once the game is responsive.
+The plugin holds a single persistent connection to the StreamDeckBridge addon, which guarantees commands execute in the order you press them. If the connection drops (game restart, addon reload), it reconnects automatically on the next press. A press while Windower is down shows an alert; just press again once the addon is loaded.
 
 ## Building from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/ffxi-windower-streamdeck.git
-cd ffxi-windower-streamdeck
+git clone https://github.com/atperry7/FFXI-Stream-Deck-Plugin.git
+cd FFXI-Stream-Deck-Plugin
 
 # Install dependencies
 npm install

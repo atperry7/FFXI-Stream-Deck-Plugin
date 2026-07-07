@@ -6,6 +6,9 @@ const WINDOWER_PORT = 19769;
 // Track running sequences to prevent double-triggering
 const runningSequences = new Set();
 
+// Sequences flagged for cancellation via the hold gesture
+const cancelledSequences = new Set();
+
 // Track cycle positions per context (persisted in settings, but also cached here)
 const cyclePositions = new Map();
 
@@ -69,17 +72,21 @@ function startProgressAnimation(context, action) {
         const complete = progress >= 100;
         const svg = generateProgressRingSVG(progress, 144, complete);
         const imageData = `data:image/svg+xml,${encodeURIComponent(svg)}`;
-        await action.setImage(imageData);
-        await action.setTitle("");
+        try {
+            await action.setImage(imageData);
+            await action.setTitle("");
+        } catch {
+            // Action may no longer be visible; never crash the plugin
+        }
 
         if (complete) {
             clearInterval(holdAnimationTimers.get(context));
         }
     };
 
-    // Run first frame immediately, then continue at HOLD_ANIMATION_FPS
-    tick();
+    // Register the timer before the first tick so the tick's guard passes
     holdAnimationTimers.set(context, setInterval(tick, 1000 / HOLD_ANIMATION_FPS));
+    tick();
 }
 
 /**
@@ -107,7 +114,22 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-streamDeck.logger.setLevel(LogLevel.DEBUG);
+/**
+ * Sleep that wakes early when the context's sequence is cancelled.
+ * Returns false if cancelled, true if the full delay elapsed.
+ */
+async function cancellableSleep(ms, context) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+        if (cancelledSequences.has(context)) return false;
+        await sleep(Math.min(100, end - Date.now()));
+    }
+    return !cancelledSequences.has(context);
+}
+
+// INFO for lifecycle events only; per-press send logs are at DEBUG so
+// heavy play doesn't generate a disk write per button press
+streamDeck.logger.setLevel(LogLevel.INFO);
 
 /**
  * Determine the routing target from button settings.
@@ -128,29 +150,44 @@ function formatCommand(settings, command) {
 }
 
 /**
- * Send a command to the Windower StreamDeckBridge addon
+ * Persistent connection to the StreamDeckBridge addon.
+ * A single socket guarantees commands arrive in press order; writes issued
+ * while connecting are buffered by Node and flushed on connect. Reconnects
+ * lazily on the next send after a drop (addon reload, Windower restart).
+ */
+let bridgeSocket = null;
+
+function getBridgeSocket() {
+    if (bridgeSocket && !bridgeSocket.destroyed) return bridgeSocket;
+
+    const sock = new net.Socket();
+    sock.setNoDelay(true);
+    sock.connect(WINDOWER_PORT, '127.0.0.1', () => {
+        streamDeck.logger.info('Connected to StreamDeckBridge');
+    });
+    sock.on('error', (err) => {
+        streamDeck.logger.warn(`Bridge connection error: ${err.message}`);
+    });
+    sock.on('close', () => {
+        if (bridgeSocket === sock) bridgeSocket = null;
+    });
+
+    bridgeSocket = sock;
+    return sock;
+}
+
+/**
+ * Send a command to the Windower StreamDeckBridge addon.
+ * Resolves once the line is written; rejects if the socket fails first
+ * (pending write callbacks receive the error when the socket is destroyed).
  */
 function sendToWindower(command) {
     return new Promise((resolve, reject) => {
-        const client = new net.Socket();
-        
-        client.setTimeout(2000);
-        
-        client.connect(WINDOWER_PORT, '127.0.0.1', () => {
-            client.write(command + '\n');
-            client.end();
-            resolve();
-        });
-        
-        client.on('error', (err) => {
-            streamDeck.logger.error(`Connection failed: ${err.message}`);
+        try {
+            getBridgeSocket().write(command + '\n', (err) => err ? reject(err) : resolve());
+        } catch (err) {
             reject(err);
-        });
-        
-        client.on('timeout', () => {
-            client.destroy();
-            reject(new Error('Connection timeout'));
-        });
+        }
     });
 }
 
@@ -172,11 +209,12 @@ streamDeck.actions.registerAction({
 
         try {
             await sendToWindower(formatCommand(settings, command));
-            streamDeck.logger.info(`Sent: ${command}`);
-            // Brief green flash feedback
+            streamDeck.logger.debug(`Sent: ${command}`);
+            // Brief green flash, then release the override so the
+            // user's own icon (or the manifest default) comes back
             await event.action.setImage('imgs/action-on');
             setTimeout(() => {
-                event.action.setImage('imgs/action');
+                event.action.setImage(undefined).catch(() => {});
             }, 300);
         } catch (err) {
             streamDeck.logger.error(`Failed to send command: ${err.message}`);
@@ -201,10 +239,12 @@ streamDeck.actions.registerAction({
         const pressDuration = endHoldDetection(context);
         const currentState = event.payload.state; // 0 = off, 1 = on
 
-        // Clear custom image override if hold entered visual feedback phase
-        // Using undefined lets the manifest's state-based icons take control again
+        // Clear image and title overrides if hold entered visual feedback phase
+        // Using undefined lets the state-based icons and titles take control again
+        // (the animation blanks the title, so it must be released here too)
         if (pressDuration > HOLD_DEAD_ZONE) {
             await event.action.setImage(undefined);
+            await event.action.setTitle(undefined);
         }
 
         // Long press: reset to OFF state
@@ -231,7 +271,7 @@ streamDeck.actions.registerAction({
 
         try {
             await sendToWindower(formatCommand(settings, command));
-            streamDeck.logger.info(`Toggle sent: ${command}`);
+            streamDeck.logger.debug(`Toggle sent: ${command}`);
             await event.action.setState(nextState);
         } catch (err) {
             streamDeck.logger.error(`Failed to send toggle command: ${err.message}`);
@@ -248,31 +288,34 @@ streamDeck.actions.registerAction({
     manifestId: "com.atperry7.ffxi-windower.sequence",
 
     onKeyDown: async (event) => {
-        const context = event.action.id;
-
-        // Don't start hold detection if sequence is running (would interfere with progress)
-        if (!runningSequences.has(context)) {
-            startHoldDetection(context, event.action);
-        }
+        startHoldDetection(event.action.id, event.action);
     },
 
     onKeyUp: async (event) => {
         const context = event.action.id;
         const pressDuration = endHoldDetection(context);
 
-        // Restore original image if hold entered visual feedback phase
-        if (pressDuration > HOLD_DEAD_ZONE && !runningSequences.has(context)) {
-            await event.action.setImage('imgs/action-sequence');
+        // Long press: cancel the running sequence, or just clear visuals.
+        // The running loop notices the flag within ~100ms and its finally
+        // block restores the button.
+        if (pressDuration >= HOLD_THRESHOLD) {
+            if (runningSequences.has(context)) {
+                cancelledSequences.add(context);
+                streamDeck.logger.info('Sequence cancelled by hold');
+            } else {
+                await event.action.setImage(undefined);
+                await event.action.setTitle(undefined);
+            }
+            return;
         }
 
-        // Long press: clear from runningSequences (in case stuck)
-        if (pressDuration >= HOLD_THRESHOLD) {
-            const wasRunning = runningSequences.has(context);
-            runningSequences.delete(context);
-            streamDeck.logger.info(`Sequence reset${wasRunning ? ' (was stuck)' : ''}`);
-            await event.action.setImage('imgs/action-sequence');
-            await event.action.setTitle("");
-            return;
+        // Restore visuals if hold entered feedback phase; a running
+        // sequence repaints its own progress title on the next step
+        if (pressDuration > HOLD_DEAD_ZONE) {
+            await event.action.setImage(undefined);
+            if (!runningSequences.has(context)) {
+                await event.action.setTitle(undefined);
+            }
         }
 
         // Short press: run sequence
@@ -293,10 +336,15 @@ streamDeck.actions.registerAction({
             return;
         }
 
+        // A cancel flag can go stale if the hold released just as the
+        // previous run finished; clear it so this run starts clean
+        cancelledSequences.delete(context);
         runningSequences.add(context);
 
         try {
             for (let i = 0; i < commands.length; i++) {
+                if (cancelledSequences.has(context)) return;
+
                 const cmd = commands[i];
                 if (!cmd.command) continue;
 
@@ -307,7 +355,7 @@ streamDeck.actions.registerAction({
                 try {
                     const cmdSettings = cmd.character ? { ...settings, character: cmd.character } : settings;
                     await sendToWindower(formatCommand(cmdSettings, cmd.command));
-                    streamDeck.logger.info(`Sequence [${i + 1}/${commands.length}]: ${cmd.command}`);
+                    streamDeck.logger.debug(`Sequence [${i + 1}/${commands.length}]: ${cmd.command}`);
                 } catch (err) {
                     streamDeck.logger.error(`Sequence command failed: ${err.message}`);
                     if (onError === "stop") {
@@ -318,16 +366,18 @@ streamDeck.actions.registerAction({
 
                 // Delay before next command (except after the last one)
                 if (i < commands.length - 1) {
-                    await sleep(delay);
+                    if (!await cancellableSleep(delay, context)) return;
                 }
             }
 
             // Success feedback
             await event.action.showOk();
         } finally {
+            cancelledSequences.delete(context);
             runningSequences.delete(context);
-            // Clear title after completion
-            await event.action.setTitle("");
+            // Release overrides: user title/icon (or manifest defaults) return
+            await event.action.setImage(undefined);
+            await event.action.setTitle(undefined);
         }
     }
 });
@@ -354,6 +404,8 @@ streamDeck.actions.registerAction({
             const safeIndex = currentIndex % commands.length;
             const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
             await event.action.setTitle(label);
+        } else {
+            await event.action.setTitle(undefined);
         }
     },
 
@@ -373,7 +425,7 @@ streamDeck.actions.registerAction({
             const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
             await event.action.setTitle(label);
         } else if (!showLabel) {
-            await event.action.setTitle("");
+            await event.action.setTitle(undefined);
         }
     },
 
@@ -389,9 +441,9 @@ streamDeck.actions.registerAction({
         const commands = settings.commands || [];
         const showLabel = settings.showLabel !== false;
 
-        // Restore original image/label if hold entered visual feedback phase
+        // Release overrides if hold entered visual feedback phase
         if (pressDuration > HOLD_DEAD_ZONE) {
-            await event.action.setImage('imgs/action-cycle');
+            await event.action.setImage(undefined);
             // Restore the current label
             const currentIndex = cyclePositions.get(context) ?? (parseInt(settings.currentIndex) || 0);
             if (showLabel && commands.length > 0) {
@@ -399,7 +451,7 @@ streamDeck.actions.registerAction({
                 const label = commands[safeIndex]?.label || `${safeIndex + 1}`;
                 await event.action.setTitle(label);
             } else {
-                await event.action.setTitle("");
+                await event.action.setTitle(undefined);
             }
         }
 
@@ -419,7 +471,7 @@ streamDeck.actions.registerAction({
                 const label = commands[0]?.label || "1";
                 await event.action.setTitle(label);
             } else {
-                await event.action.setTitle("");
+                await event.action.setTitle(undefined);
             }
             return;
         }
@@ -447,7 +499,7 @@ streamDeck.actions.registerAction({
             // Execute the current command (per-command character overrides button-level target)
             const cmdSettings = cmd.character ? { ...settings, character: cmd.character } : settings;
             await sendToWindower(formatCommand(cmdSettings, cmd.command));
-            streamDeck.logger.info(`Cycle [${currentIndex + 1}/${commands.length}]: ${cmd.command}`);
+            streamDeck.logger.debug(`Cycle [${currentIndex + 1}/${commands.length}]: ${cmd.command}`);
 
             // Advance to next position after executing
             const nextIndex = (currentIndex + 1) % commands.length;
@@ -465,13 +517,13 @@ streamDeck.actions.registerAction({
                 const label = nextCmd?.label || `${nextIndex + 1}`;
                 await event.action.setTitle(label);
             } else {
-                await event.action.setTitle("");
+                await event.action.setTitle(undefined);
             }
 
-            // Brief visual feedback
+            // Brief visual feedback, then release the image override
             await event.action.setImage('imgs/action-on');
             setTimeout(() => {
-                event.action.setImage('imgs/action-cycle');
+                event.action.setImage(undefined).catch(() => {});
             }, 200);
 
         } catch (err) {

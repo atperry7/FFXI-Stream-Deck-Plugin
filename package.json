@@ -1,6 +1,6 @@
 {
     "name": "ffxi-windower-streamdeck",
-    "version": "1.0.0",
+    "version": "1.4.0",
     "main": "bin/plugin.js",
     "type": "module",
     "dependencies": {

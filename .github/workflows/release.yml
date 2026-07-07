@@ -13,6 +13,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -75,4 +77,4 @@ jobs:
         with:
           files: ${{ steps.find-package.outputs.PACKAGE_PATH }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
